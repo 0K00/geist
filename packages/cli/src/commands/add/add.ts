@@ -7,11 +7,13 @@ import { existsSync } from "node:fs";
 import { error } from "node:console";
 import { handleError } from "../../utils/error";
 import { registry } from "../../utils/components";
+import { cancel, isCancel, multiselect } from "@clack/prompts";
 
 interface Options {
     components: string[];
     all: boolean;
     cwd: string;
+    deps: boolean;
 };
 
 export const add = new Command()
@@ -19,6 +21,7 @@ export const add = new Command()
     .description("add components to your project")
     .argument("[components...]", "name of components")
     .option("-c, --cwd <cwd>", "the working directory", process.cwd())
+    .option("--no-deps", "skips adding & installing package dependencies")
     .option("-a, --all", "install all components to your project", false)
     .action(async (components, opts) => {
         try {
@@ -45,4 +48,23 @@ const runAdd = async (cwd: string, options: Options) => {
     let selectedComponents = new Set(
 		options.all ? registry.map(({ name }) => name) : options.components
 	);
+
+    if(selectedComponents === undefined || selectedComponents.size === 0) {
+        const components = await multiselect({
+            message: `Which ${highlight("components")} would you like to install?`,
+            options: registry.map(({ name, dependencies, registryDependencies}) => {
+                const deps = [...(options.deps ? dependencies : []), ...registryDependencies];
+                return {
+                    label: name,
+                    value: name,
+                    hint: deps.length ? `also installs: ${deps.join(", ")}` : undefined
+                };
+            })
+        });
+
+        if(isCancel(components)) {
+            cancel("Operation cancelled.");
+            process.exit(0);
+        }
+    }
 }
